@@ -1,0 +1,26 @@
+#!/bin/bash
+echo "cp $1 /tmp";
+cp $1 /tmp
+
+cd /tmp
+echo "Gen key..."
+keytool -genkey -v -keystore nopin.jks -keyalg RSA -keysize 2048 -validity 10000 -alias nopin -storepass xnopin -keypass xnopin  -dname "CN=example.com, OU=NOPIN, O=NOPIN, L=nopin, S=nopin, C=AU"
+
+echo "decompile $1 to /tmp/assembler"
+apktool d $1 -o assembler
+ls /tmp
+
+echo "patch code..."
+grep --include \*.smali -lrZ 'Certificate pinning failure!' assembler | xargs -0 -l sed -i 's/\(.*Certificate pinning failure!\)/    return-void\n\n\1/g'
+
+echo "recompile..."
+apktool b assembler -o patched.apk
+
+echo "signing jar..."
+jarsigner –verbose -storepass xnopin -keypass xnopin –keystore nopin.jks –signedjar signed.apk patched.apk nopin
+
+echo "align apk..."
+zipalign -f 4 signed.apk aligned.apk
+
+echo "moving aligned.apk to /app/SIGNED_$1"
+mv aligned.apk "/app/SIGNED_$1"
